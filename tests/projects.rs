@@ -51,7 +51,7 @@ fn persists_projects_across_cli_processes_and_reopens_migration() {
         connection
             .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        2
+        3
     );
 }
 
@@ -82,12 +82,12 @@ fn rejects_newer_schema_without_changing_database_bytes() {
     let temp = TempDir::new().unwrap();
     let db = temp.path().join("future.sqlite");
     let connection = Connection::open(&db).unwrap();
-    connection.execute_batch("CREATE TABLE future_data (value TEXT); INSERT INTO future_data VALUES ('keep'); PRAGMA user_version = 3;").unwrap();
+    connection.execute_batch("CREATE TABLE future_data (value TEXT); INSERT INTO future_data VALUES ('keep'); PRAGMA user_version = 4;").unwrap();
     drop(connection);
     let before = fs::read(&db).unwrap();
     let output = cli(&db, &["project", "list"]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("schema version 3 is unsupported"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("schema version 4 is unsupported"));
     assert_eq!(before, fs::read(&db).unwrap());
 }
 

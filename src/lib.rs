@@ -17,6 +17,16 @@ pub enum Error {
     UnknownProject { id: i64 },
     #[error("task {id} does not exist")]
     UnknownTask { id: i64 },
+    #[error("task {task} cannot depend on itself")]
+    SelfDependency { task: i64 },
+    #[error("tasks {task} and {prerequisite} belong to different projects")]
+    CrossProjectDependency { task: i64, prerequisite: i64 },
+    #[error("circular task dependency detected")]
+    CircularDependency,
+    #[error("task {task} already depends on {prerequisite}")]
+    DuplicateDependency { task: i64, prerequisite: i64 },
+    #[error("task {task} does not depend on {prerequisite}")]
+    UnknownDependency { task: i64, prerequisite: i64 },
     #[error(
         "database schema version {found} is unsupported; this Forge supports version {supported}"
     )]

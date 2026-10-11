@@ -51,6 +51,30 @@ enum TaskCommand {
         #[arg(allow_hyphen_values(true))]
         id: i64,
     },
+    Dependency {
+        #[command(subcommand)]
+        command: DependencyCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum DependencyCommand {
+    Add {
+        #[arg(allow_hyphen_values(true))]
+        task_id: i64,
+        #[arg(allow_hyphen_values(true))]
+        prerequisite_id: i64,
+    },
+    List {
+        #[arg(allow_hyphen_values(true))]
+        task_id: i64,
+    },
+    Remove {
+        #[arg(allow_hyphen_values(true))]
+        task_id: i64,
+        #[arg(allow_hyphen_values(true))]
+        prerequisite_id: i64,
+    },
 }
 
 fn run(cli: Cli) -> Result<(), Error> {
@@ -103,7 +127,8 @@ fn run(cli: Cli) -> Result<(), Error> {
         Command::Task {
             command: TaskCommand::Show { id },
         } => {
-            let task = Store::open(&cli.db)?.get_task(id)?;
+            let store = Store::open(&cli.db)?;
+            let task = store.get_task(id)?;
             println!("Task {}", task.id);
             println!("Project: {}", task.project_id);
             println!("Title: {}", task.title.as_str());
@@ -112,7 +137,37 @@ fn run(cli: Cli) -> Result<(), Error> {
             for (index, criterion) in task.criteria.iter().enumerate() {
                 println!("{}. {}", index + 1, criterion.as_str());
             }
+            println!("Dependencies:");
+            let dependencies = store.list_dependencies(id)?;
+            if dependencies.is_empty() {
+                println!("(none)");
+            } else {
+                for dependency in dependencies {
+                    println!("{dependency}");
+                }
+            }
         }
+        Command::Task {
+            command: TaskCommand::Dependency { command },
+        } => match command {
+            DependencyCommand::Add {
+                task_id,
+                prerequisite_id,
+            } => {
+                Store::open(&cli.db)?.add_dependency(task_id, prerequisite_id)?;
+            }
+            DependencyCommand::List { task_id } => {
+                for dependency in Store::open(&cli.db)?.list_dependencies(task_id)? {
+                    println!("{dependency}");
+                }
+            }
+            DependencyCommand::Remove {
+                task_id,
+                prerequisite_id,
+            } => {
+                Store::open(&cli.db)?.remove_dependency(task_id, prerequisite_id)?;
+            }
+        },
     }
     Ok(())
 }
