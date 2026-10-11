@@ -1,8 +1,21 @@
 pub mod domain;
+pub mod execution;
 pub mod storage;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("task transition from {from} to {to} is not allowed")]
+    InvalidTransition { from: String, to: String },
+    #[error("task {0} has incomplete prerequisites")]
+    IncompleteDependencies(i64),
+    #[error("dependencies cannot change while task {0} is running, in review or completed")]
+    FrozenDependencies(i64),
+    #[error("run {0} does not exist or is no longer running")]
+    InactiveRun(i64),
+    #[error("another worker holds the database execution lock")]
+    WorkerBusy,
+    #[error("filesystem or process operation failed: {0}")]
+    Io(#[from] std::io::Error),
     #[error("project name must contain 1 to 200 characters and no control characters")]
     InvalidProjectName,
     #[error("task title must contain 1 to 200 characters and no control characters")]

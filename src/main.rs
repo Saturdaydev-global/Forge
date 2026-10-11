@@ -26,6 +26,32 @@ enum Command {
         #[command(subcommand)]
         command: TaskCommand,
     },
+    Run {
+        #[command(subcommand)]
+        command: RunCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum RunCommand {
+    /// Deterministic simulation, never a real agent.
+    Mock {
+        task: i64,
+        #[arg(long)]
+        fail: bool,
+        #[arg(long, default_value_t = 0)]
+        delay_ms: u64,
+    },
+    List {
+        task: i64,
+    },
+    Events {
+        id: i64,
+    },
+    Cancel {
+        id: i64,
+    },
+    Recover,
 }
 
 #[derive(Subcommand)]
@@ -36,6 +62,14 @@ enum ProjectCommand {
 
 #[derive(Subcommand)]
 enum TaskCommand {
+    Status {
+        id: i64,
+        status: String,
+    },
+    Ready {
+        #[arg(long)]
+        project: i64,
+    },
     Add {
         #[arg(long, value_name = "ID", allow_hyphen_values(true))]
         project: i64,
@@ -79,6 +113,42 @@ enum DependencyCommand {
 
 fn run(cli: Cli) -> Result<(), Error> {
     match cli.command {
+        Command::Run { command } => {
+            use forge::execution::{WorkerGuard, run_mock};
+            match command {
+                RunCommand::Mock {
+                    task,
+                    fail,
+                    delay_ms,
+                } => println!("{}", run_mock(&cli.db, task, fail, delay_ms)?),
+                RunCommand::List { task } => {
+                    for run in Store::open(&cli.db)?.runs(task)? {
+                        println!("{}\t{}\t{}\t{}", run.id, run.backend, run.model, run.status);
+                    }
+                }
+                RunCommand::Events { id } => {
+                    for (kind, detail) in Store::open(&cli.db)?.events(id)? {
+                        println!("{kind}\t{detail}");
+                    }
+                }
+                RunCommand::Cancel { id } => Store::open(&cli.db)?.request_cancel(id)?,
+                RunCommand::Recover => {
+                    let mut store = Store::open(&cli.db)?;
+                    let guard = WorkerGuard::acquire(&cli.db)?;
+                    println!("{} interrupted runs recovered", store.recover(&guard)?);
+                }
+            }
+        }
+        Command::Task {
+            command: TaskCommand::Status { id, status },
+        } => Store::open(&cli.db)?.change_status(id, status.parse()?)?,
+        Command::Task {
+            command: TaskCommand::Ready { project },
+        } => {
+            for id in Store::open(&cli.db)?.ready_tasks(project)? {
+                println!("{id}");
+            }
+        }
         Command::Project {
             command: ProjectCommand::Add { name },
         } => {

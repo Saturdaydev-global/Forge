@@ -7,10 +7,10 @@ use crate::{
     domain::{Criterion, Project, ProjectName, Task, TaskStatus, TaskTitle},
 };
 
-const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 pub struct Store {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 impl Store {
@@ -35,6 +35,9 @@ impl Store {
             if version <= 2 {
                 transaction
                     .execute_batch(include_str!("../migrations/0003_task_dependencies.sql"))?;
+            }
+            if version <= 3 {
+                transaction.execute_batch(include_str!("../migrations/0004_execution.sql"))?;
             }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
             transaction.commit()?;
@@ -160,6 +163,7 @@ impl Store {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let task_project = task_project_id(&transaction, task_id)?;
+        editable_dependencies(&transaction, task_id)?;
         let prerequisite_project = task_project_id(&transaction, prerequisite_id)?;
         if task_id == prerequisite_id {
             return Err(Error::SelfDependency { task: task_id });
@@ -192,6 +196,7 @@ impl Store {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         task_project_id(&transaction, task_id)?;
+        editable_dependencies(&transaction, task_id)?;
         task_project_id(&transaction, prerequisite_id)?;
         let removed = transaction.execute(
             "DELETE FROM task_dependencies WHERE task_id = ?1 AND prerequisite_id = ?2",
@@ -252,6 +257,17 @@ fn task_project_id(connection: &Connection, id: i64) -> Result<i64, Error> {
             rusqlite::Error::QueryReturnedNoRows => Error::UnknownTask { id },
             other => Error::Database(other),
         })
+}
+
+fn editable_dependencies(connection: &Connection, id: i64) -> Result<(), Error> {
+    let status: String =
+        connection.query_row("SELECT status FROM tasks WHERE id=?1", [id], |row| {
+            row.get(0)
+        })?;
+    if !status.parse::<TaskStatus>()?.dependencies_editable() {
+        return Err(Error::FrozenDependencies(id));
+    }
+    Ok(())
 }
 
 fn dependency_exists(

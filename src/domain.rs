@@ -60,13 +60,42 @@ impl Criterion {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskStatus {
     Backlog,
+    Ready,
+    Running,
+    Review,
+    Completed,
+    Blocked,
+    Failed,
+    Cancelled,
 }
 
 impl TaskStatus {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Backlog => "backlog",
+            Self::Ready => "ready",
+            Self::Running => "running",
+            Self::Review => "review",
+            Self::Completed => "completed",
+            Self::Blocked => "blocked",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
         }
+    }
+
+    pub fn can_change_to(self, next: Self) -> bool {
+        use TaskStatus::*;
+        matches!(
+            (self, next),
+            (Backlog | Blocked | Failed | Cancelled, Ready)
+                | (Ready, Backlog | Blocked | Cancelled)
+                | (Backlog | Blocked | Failed, Cancelled)
+                | (Review, Completed | Ready | Cancelled)
+        )
+    }
+
+    pub fn dependencies_editable(self) -> bool {
+        !matches!(self, Self::Running | Self::Review | Self::Completed)
     }
 }
 
@@ -76,6 +105,13 @@ impl std::str::FromStr for TaskStatus {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "backlog" => Ok(Self::Backlog),
+            "ready" => Ok(Self::Ready),
+            "running" => Ok(Self::Running),
+            "review" => Ok(Self::Review),
+            "completed" => Ok(Self::Completed),
+            "blocked" => Ok(Self::Blocked),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
             _ => Err(Error::InvalidTaskStatus),
         }
     }
