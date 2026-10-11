@@ -23,6 +23,73 @@ pub struct Project {
     pub name: ProjectName,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskTitle(String);
+
+impl TaskTitle {
+    pub fn new(value: &str) -> Result<Self, Error> {
+        let value = value.trim();
+        if value.is_empty() || value.chars().count() > 200 || value.chars().any(char::is_control) {
+            return Err(Error::InvalidTaskTitle);
+        }
+        Ok(Self(value.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Criterion(String);
+
+impl Criterion {
+    pub fn new(value: &str) -> Result<Self, Error> {
+        let value = value.trim();
+        if value.is_empty() || value.chars().count() > 200 || value.chars().any(char::is_control) {
+            return Err(Error::InvalidCriterion);
+        }
+        Ok(Self(value.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskStatus {
+    Backlog,
+}
+
+impl TaskStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Backlog => "backlog",
+        }
+    }
+}
+
+impl std::str::FromStr for TaskStatus {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "backlog" => Ok(Self::Backlog),
+            _ => Err(Error::InvalidTaskStatus),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Task {
+    pub id: i64,
+    pub project_id: i64,
+    pub title: TaskTitle,
+    pub status: TaskStatus,
+    pub criteria: Vec<Criterion>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -37,5 +104,26 @@ mod tests {
                 Err(Error::InvalidProjectName)
             ));
         }
+    }
+
+    #[test]
+    fn validates_task_titles_and_criteria() {
+        assert_eq!(TaskTitle::new("  Routing  ").unwrap().as_str(), "Routing");
+        assert_eq!(Criterion::new("  Done  ").unwrap().as_str(), "Done");
+        for value in ["", "  ", "a\nb", &"x".repeat(201)] {
+            assert!(matches!(
+                TaskTitle::new(value),
+                Err(Error::InvalidTaskTitle)
+            ));
+            assert!(matches!(
+                Criterion::new(value),
+                Err(Error::InvalidCriterion)
+            ));
+        }
+        assert_eq!(
+            "backlog".parse::<TaskStatus>().unwrap(),
+            TaskStatus::Backlog
+        );
+        assert!("done".parse::<TaskStatus>().is_err());
     }
 }
