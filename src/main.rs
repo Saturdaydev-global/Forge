@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::ExitCode};
+use std::{path::PathBuf, process::ExitCode, time::Duration};
 
 use clap::{Parser, Subcommand};
 use forge::{
@@ -11,7 +11,7 @@ use forge::{
 #[command(version, about = "Local project management for Saturday Forge")]
 struct Cli {
     #[arg(long, value_name = "PATH")]
-    db: PathBuf,
+    db: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
 }
@@ -33,6 +33,11 @@ enum Command {
     Run {
         #[command(subcommand)]
         command: RunCommand,
+    },
+    /// Detect and exercise an ACP harness.
+    Acp {
+        #[command(subcommand)]
+        command: AcpCommand,
     },
 }
 
@@ -174,10 +179,38 @@ enum DependencyCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum AcpCommand {
+    /// Detect harness name, version, and ACP subcommand support.
+    Detect {
+        #[arg(long, default_value = "opencode")]
+        executable: PathBuf,
+    },
+    /// Exercise initialize + session/new (and optionally one prompt turn).
+    Probe {
+        #[arg(long, default_value = "opencode")]
+        executable: PathBuf,
+        #[arg(long)]
+        cwd: Option<PathBuf>,
+        #[arg(long, default_value_t = 60)]
+        timeout: u64,
+        #[arg(long)]
+        prompt: Option<String>,
+        #[arg(long = "arg", default_value = "acp")]
+        args: Vec<String>,
+    },
+}
+
 fn run(cli: Cli) -> Result<(), Error> {
+    // Commands that touch the database require --db; ACP commands do not.
+    let db = || {
+        cli.db
+            .as_deref()
+            .ok_or_else(|| Error::Policy("--db is required for this command".into()))
+    };
     match cli.command {
         Command::Model { command } => {
-            let mut store = Store::open(&cli.db)?;
+            let mut store = Store::open(db()?)?;
             match command {
                 ModelCommand::Add {
                     id,
@@ -218,45 +251,45 @@ fn run(cli: Cli) -> Result<(), Error> {
             use forge::execution::{WorkerGuard, run_mock};
             match command {
                 RunCommand::Opencode { task, options } => {
-                    println!("{}", agent(&cli.db, task, options)?)
+                    println!("{}", agent(db()?, task, options)?)
                 }
                 RunCommand::Next { project, options } => {
-                    let ready = Store::open(&cli.db)?.ready_tasks(project)?;
+                    let ready = Store::open(db()?)?.ready_tasks(project)?;
                     let task = *ready
                         .first()
                         .ok_or_else(|| Error::Policy("no eligible ready tasks".into()))?;
-                    println!("{}", agent(&cli.db, task, options)?);
+                    println!("{}", agent(db()?, task, options)?);
                 }
                 RunCommand::Mock {
                     task,
                     fail,
                     delay_ms,
-                } => println!("{}", run_mock(&cli.db, task, fail, delay_ms)?),
+                } => println!("{}", run_mock(db()?, task, fail, delay_ms)?),
                 RunCommand::List { task } => {
-                    for run in Store::open(&cli.db)?.runs(task)? {
+                    for run in Store::open(db()?)?.runs(task)? {
                         println!("{}\t{}\t{}\t{}", run.id, run.backend, run.model, run.status);
                     }
                 }
                 RunCommand::Events { id } => {
-                    for (kind, detail) in Store::open(&cli.db)?.events(id)? {
+                    for (kind, detail) in Store::open(db()?)?.events(id)? {
                         println!("{kind}\t{detail}");
                     }
                 }
-                RunCommand::Cancel { id } => Store::open(&cli.db)?.request_cancel(id)?,
+                RunCommand::Cancel { id } => Store::open(db()?)?.request_cancel(id)?,
                 RunCommand::Recover => {
-                    let mut store = Store::open(&cli.db)?;
-                    let guard = WorkerGuard::acquire(&cli.db)?;
+                    let mut store = Store::open(db()?)?;
+                    let guard = WorkerGuard::acquire(db()?)?;
                     println!("{} interrupted runs recovered", store.recover(&guard)?);
                 }
             }
         }
         Command::Task {
             command: TaskCommand::Status { id, status },
-        } => Store::open(&cli.db)?.change_status(id, status.parse()?)?,
+        } => Store::open(db()?)?.change_status(id, status.parse()?)?,
         Command::Task {
             command: TaskCommand::Ready { project },
         } => {
-            for id in Store::open(&cli.db)?.ready_tasks(project)? {
+            for id in Store::open(db()?)?.ready_tasks(project)? {
                 println!("{id}");
             }
         }
@@ -264,13 +297,13 @@ fn run(cli: Cli) -> Result<(), Error> {
             command: ProjectCommand::Add { name },
         } => {
             let name = ProjectName::new(&name)?;
-            let project = Store::open(&cli.db)?.add_project(name)?;
+            let project = Store::open(db()?)?.add_project(name)?;
             println!("{}\t{}", project.id, project.name.as_str());
         }
         Command::Project {
             command: ProjectCommand::List,
         } => {
-            for project in Store::open(&cli.db)?.list_projects()? {
+            for project in Store::open(db()?)?.list_projects()? {
                 println!("{}\t{}", project.id, project.name.as_str());
             }
         }
@@ -290,13 +323,13 @@ fn run(cli: Cli) -> Result<(), Error> {
                 .iter()
                 .map(|value| Criterion::new(value))
                 .collect::<Result<Vec<_>, _>>()?;
-            let task = Store::open(&cli.db)?.add_task(project, title, criteria)?;
+            let task = Store::open(db()?)?.add_task(project, title, criteria)?;
             println!("{}\t{}", task.id, task.title.as_str());
         }
         Command::Task {
             command: TaskCommand::List { project },
         } => {
-            for task in Store::open(&cli.db)?.list_tasks(project)? {
+            for task in Store::open(db()?)?.list_tasks(project)? {
                 println!(
                     "{}\t{}\t{}",
                     task.id,
@@ -308,7 +341,7 @@ fn run(cli: Cli) -> Result<(), Error> {
         Command::Task {
             command: TaskCommand::Show { id },
         } => {
-            let store = Store::open(&cli.db)?;
+            let store = Store::open(db()?)?;
             let task = store.get_task(id)?;
             println!("Task {}", task.id);
             println!("Project: {}", task.project_id);
@@ -335,10 +368,10 @@ fn run(cli: Cli) -> Result<(), Error> {
                 task_id,
                 prerequisite_id,
             } => {
-                Store::open(&cli.db)?.add_dependency(task_id, prerequisite_id)?;
+                Store::open(db()?)?.add_dependency(task_id, prerequisite_id)?;
             }
             DependencyCommand::List { task_id } => {
-                for dependency in Store::open(&cli.db)?.list_dependencies(task_id)? {
+                for dependency in Store::open(db()?)?.list_dependencies(task_id)? {
                     println!("{dependency}");
                 }
             }
@@ -346,7 +379,52 @@ fn run(cli: Cli) -> Result<(), Error> {
                 task_id,
                 prerequisite_id,
             } => {
-                Store::open(&cli.db)?.remove_dependency(task_id, prerequisite_id)?;
+                Store::open(db()?)?.remove_dependency(task_id, prerequisite_id)?;
+            }
+        },
+        Command::Acp { command } => match command {
+            AcpCommand::Detect { executable } => {
+                let info = forge::acp::detect_harness(&executable)?;
+                println!(
+                    "{}\t{}\tacp={}",
+                    info.name, info.version, info.acp_supported
+                );
+            }
+            AcpCommand::Probe {
+                executable,
+                cwd,
+                timeout,
+                prompt,
+                args,
+            } => {
+                let cwd = cwd.unwrap_or_else(|| std::env::current_dir().unwrap());
+                let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+                let options = forge::acp::ExerciseOptions {
+                    cwd,
+                    timeout: Duration::from_secs(timeout),
+                    prompt,
+                    cancel_after_updates: None,
+                    extra_envs: Vec::new(),
+                };
+                let report = forge::acp::exercise(&executable, &arg_refs, options)?;
+                println!(
+                    "agent={}\tversion={}\tprotocol={}\tsession={}\tstop={}\tupdates={}",
+                    report.agent_name.as_deref().unwrap_or("-"),
+                    report.agent_version.as_deref().unwrap_or("-"),
+                    report.protocol_version,
+                    report.session_id,
+                    report.stop_reason.as_deref().unwrap_or("-"),
+                    report.updates.len()
+                );
+                for method in &report.auth_methods {
+                    println!(
+                        "auth={}\tkind={}\tname={}",
+                        method.id, method.kind, method.name
+                    );
+                }
+                if !report.agent_text.is_empty() {
+                    println!("text={}", report.agent_text);
+                }
             }
         },
     }

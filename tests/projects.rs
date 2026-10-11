@@ -73,7 +73,7 @@ fn requires_explicit_database_path() {
         .args(["project", "list"])
         .output()
         .unwrap();
-    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).contains("--db"));
 }
 

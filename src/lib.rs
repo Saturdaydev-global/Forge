@@ -1,3 +1,4 @@
+pub mod acp;
 pub mod backend;
 pub mod domain;
 pub mod execution;
@@ -51,4 +52,6 @@ pub enum Error {
     UnsupportedSchema { found: i64, supported: i64 },
     #[error("database operation failed: {0}")]
     Database(#[from] rusqlite::Error),
+    #[error("acp: {0}")]
+    Acp(String),
 }
