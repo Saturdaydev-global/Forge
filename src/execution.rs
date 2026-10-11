@@ -75,6 +75,12 @@ impl Drop for WorkerGuard {
 }
 
 impl Store {
+    pub fn record_result(&self, id: i64, proposal: &str) -> Result<(), Error> {
+        if proposal.len() > 65_536 {
+            return Err(Error::Policy("proposal exceeds 64 KiB".into()));
+        }
+        event(&self.connection, id, "proposal", proposal)
+    }
     pub fn change_status(&mut self, id: i64, next: TaskStatus) -> Result<(), Error> {
         let tx = self
             .connection

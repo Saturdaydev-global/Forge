@@ -99,7 +99,7 @@ fn migrates_fresh_database_to_version_3() {
     let temp = TempDir::new().unwrap();
     let db = temp.path().join("fresh.sqlite");
     assert_eq!(success(&cli(&db, &["project", "list"])), "");
-    assert_eq!(user_version(&db), 4);
+    assert_eq!(user_version(&db), forge::storage::SCHEMA_VERSION);
     let names = tables(&db);
     assert!(names.contains(&"projects".to_owned()));
     assert!(names.contains(&"tasks".to_owned()));
@@ -113,7 +113,7 @@ fn migrates_v1_and_v2_preserving_existing_data() {
     let v1 = temp.path().join("v1.sqlite");
     create_v1_database(&v1);
     assert_eq!(success(&cli(&v1, &["project", "list"])), "1\tLegacy\n");
-    assert_eq!(user_version(&v1), 4);
+    assert_eq!(user_version(&v1), forge::storage::SCHEMA_VERSION);
     add_task(&v1, "1", "After");
     assert_eq!(
         success(&cli(&v1, &["task", "list", "--project", "1"])),
@@ -130,7 +130,7 @@ fn migrates_v1_and_v2_preserving_existing_data() {
     let show = success(&cli(&v2, &["task", "show", "1"]));
     assert!(show.contains("Title: Kept"));
     assert!(show.contains("Keep me"));
-    assert_eq!(user_version(&v2), 4);
+    assert_eq!(user_version(&v2), forge::storage::SCHEMA_VERSION);
     add_task(&v2, "1", "Second");
     success(&cli(&v2, &["task", "dependency", "add", "2", "1"]));
     assert_eq!(

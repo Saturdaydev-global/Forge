@@ -1,5 +1,13 @@
 # Saturday Forge
 
+## Real backend and models
+
+`model add opencode/mimo-v2.5-free --cost free --access anonymous --enable` explicitly registers a zero-spend candidate. Use `model list`, `model route --policy free`, and `run opencode <task-id> --policy pinned --model opencode/mimo-v2.5-free`. `run next --project <id>` selects the oldest eligible ready task. Runs require a ready task and explicit invocation; they never start at launch.
+
+The current OpenCode adapter produces text proposals with all tools denied, in a temporary credential-isolated profile. It does not edit your repository. Its live connectivity is not yet proven; tested OpenCode 1.17.18 anonymous routes have returned failures on this machine. Inspect `run list` and `run events`; failures are not successful execution. See `docs/security.md`.
+
+`model discover` fetches Free Router's public catalog once and imports disabled, unverified-cost candidates. It never installs/runs Free Router or sends provider requests. Manual registration supersedes discovery. Routing policies: pinned, free/economy, subscription-first, balanced/best (the latter use manually assigned priority). Paid/unknown routes are always excluded. Subscription entries are metadata only until credential authorization support exists.
+
 Rust CLI foundation for local project and task management. This increment supports project creation and listing plus task creation, lifecycle, dependencies and durable execution records in SQLite.
 
 Requires Rust 1.98.1 and a C toolchain for bundled SQLite. Development currently uses the Windows GNU toolchain with MinGW GCC.
@@ -17,7 +25,7 @@ cargo build --locked --release
 .\target\release\forge.exe --db "$env:TEMP\forge-demo.sqlite" task dependency remove 2 1
 ```
 
-`--db` is required. Its parent directory must exist. A missing database is initialized transactionally at schema version 4; version 1, 2 and 3 databases are migrated transactionally to version 4 without losing projects, tasks or criteria, and newer versions are rejected without migration. Foreign keys are enforced. `task add` inserts the task and all criteria atomically with parameterized SQL. Dependency changes are atomic.
+`--db` is required. Its parent directory must exist. A missing database is initialized transactionally at schema version 5; version 1–4 databases are migrated transactionally to version 5 without losing projects, tasks or criteria, and newer versions are rejected without migration. Foreign keys are enforced. `task add` inserts the task and all criteria atomically with parameterized SQL. Dependency changes are atomic.
 
 CLI argument errors exit with code 2; validation and database errors exit with code 1. Lock contention waits up to 250 ms before reporting an error. Project and task data is plaintext; do not store secrets. The explicit mock backend simulates execution; it does not execute commands or contact providers. No background service starts automatically.
 

@@ -57,7 +57,7 @@ fn migrates_v1_to_v2_without_losing_projects() {
 
     let output = cli(&db, &["project", "list"]);
     assert_eq!(success(&output), "1\tLegacy\n");
-    assert_eq!(user_version(&db), 4);
+    assert_eq!(user_version(&db), forge::storage::SCHEMA_VERSION);
 
     let store = Store::open(&db).unwrap();
     let projects = store.list_projects().unwrap();
@@ -129,7 +129,7 @@ fn persists_tasks_across_cli_processes_and_preserves_order() {
             .collect::<Vec<_>>(),
         vec!["Routes tasks", "Rejects paid fallback"]
     );
-    assert_eq!(user_version(&db), 4);
+    assert_eq!(user_version(&db), forge::storage::SCHEMA_VERSION);
 }
 
 #[test]

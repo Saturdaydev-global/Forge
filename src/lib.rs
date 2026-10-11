@@ -1,9 +1,14 @@
+pub mod backend;
 pub mod domain;
 pub mod execution;
+mod process;
+pub mod providers;
 pub mod storage;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("policy: {0}")]
+    Policy(String),
     #[error("task transition from {from} to {to} is not allowed")]
     InvalidTransition { from: String, to: String },
     #[error("task {0} has incomplete prerequisites")]

@@ -18,6 +18,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    Model {
+        #[command(subcommand)]
+        command: ModelCommand,
+    },
     Project {
         #[command(subcommand)]
         command: ProjectCommand,
@@ -34,6 +38,19 @@ enum Command {
 
 #[derive(Subcommand)]
 enum RunCommand {
+    /// Execute a real, credential-isolated OpenCode proposal.
+    Opencode {
+        task: i64,
+        #[command(flatten)]
+        options: AgentOptions,
+    },
+    /// Execute the oldest eligible ready task in this project.
+    Next {
+        #[arg(long)]
+        project: i64,
+        #[command(flatten)]
+        options: AgentOptions,
+    },
     /// Deterministic simulation, never a real agent.
     Mock {
         task: i64,
@@ -52,6 +69,52 @@ enum RunCommand {
         id: i64,
     },
     Recover,
+}
+
+#[derive(clap::Args)]
+struct AgentOptions {
+    #[arg(long, default_value = "free")]
+    policy: String,
+    #[arg(long)]
+    model: Option<String>,
+    #[arg(long, default_value = "opencode")]
+    executable: PathBuf,
+    #[arg(long, default_value_t = 120)]
+    timeout: u64,
+}
+
+#[derive(Subcommand)]
+enum ModelCommand {
+    Add {
+        id: String,
+        #[arg(long)]
+        cost: String,
+        #[arg(long)]
+        access: String,
+        #[arg(long)]
+        enable: bool,
+        #[arg(long, default_value_t = 0)]
+        priority: i64,
+    },
+    List,
+    Route {
+        #[arg(long, default_value = "free")]
+        policy: String,
+        #[arg(long)]
+        model: Option<String>,
+    },
+    /// Fetch metadata only; imported entries are disabled and cost remains unknown.
+    Discover,
+}
+
+fn agent(db: &std::path::Path, task: i64, options: AgentOptions) -> Result<i64, Error> {
+    let model = Store::open(db)?.route(&options.policy, options.model.as_deref())?;
+    let backend = forge::backend::OpenCode::new(
+        options.executable,
+        &model,
+        std::time::Duration::from_secs(options.timeout),
+    )?;
+    forge::backend::execute(db, task, &backend)
 }
 
 #[derive(Subcommand)]
@@ -113,9 +176,57 @@ enum DependencyCommand {
 
 fn run(cli: Cli) -> Result<(), Error> {
     match cli.command {
+        Command::Model { command } => {
+            let mut store = Store::open(&cli.db)?;
+            match command {
+                ModelCommand::Add {
+                    id,
+                    cost,
+                    access,
+                    enable,
+                    priority,
+                } => store.register_model(&forge::providers::Model {
+                    id,
+                    cost,
+                    access,
+                    enabled: enable,
+                    priority,
+                    source: "manual".into(),
+                })?,
+                ModelCommand::List => {
+                    for model in store.models()? {
+                        println!(
+                            "{}\t{}\t{}\t{}\t{}",
+                            model.id,
+                            model.cost,
+                            model.access,
+                            model.source,
+                            if model.enabled { "enabled" } else { "disabled" }
+                        );
+                    }
+                }
+                ModelCommand::Route { policy, model } => {
+                    println!("{}", store.route(&policy, model.as_deref())?.id)
+                }
+                ModelCommand::Discover => println!(
+                    "{} discovered models (disabled, cost unverified)",
+                    forge::providers::discover(&mut store)?
+                ),
+            }
+        }
         Command::Run { command } => {
             use forge::execution::{WorkerGuard, run_mock};
             match command {
+                RunCommand::Opencode { task, options } => {
+                    println!("{}", agent(&cli.db, task, options)?)
+                }
+                RunCommand::Next { project, options } => {
+                    let ready = Store::open(&cli.db)?.ready_tasks(project)?;
+                    let task = *ready
+                        .first()
+                        .ok_or_else(|| Error::Policy("no eligible ready tasks".into()))?;
+                    println!("{}", agent(&cli.db, task, options)?);
+                }
                 RunCommand::Mock {
                     task,
                     fail,

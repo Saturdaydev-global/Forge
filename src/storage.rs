@@ -7,7 +7,7 @@ use crate::{
     domain::{Criterion, Project, ProjectName, Task, TaskStatus, TaskTitle},
 };
 
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 pub struct Store {
     pub(crate) connection: Connection,
@@ -38,6 +38,9 @@ impl Store {
             }
             if version <= 3 {
                 transaction.execute_batch(include_str!("../migrations/0004_execution.sql"))?;
+            }
+            if version <= 4 {
+                transaction.execute_batch(include_str!("../migrations/0005_models.sql"))?;
             }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
             transaction.commit()?;

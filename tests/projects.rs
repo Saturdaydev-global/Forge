@@ -51,7 +51,7 @@ fn persists_projects_across_cli_processes_and_reopens_migration() {
         connection
             .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        4
+        forge::storage::SCHEMA_VERSION
     );
 }
 
