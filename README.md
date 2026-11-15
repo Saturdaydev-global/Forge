@@ -43,3 +43,27 @@ cargo test --locked --all-targets
 Tests use temporary databases and separate CLI processes to verify persistence, validation, migration reopening, schema rejection, migration failure, corruption, lock errors, v1/v2 to v3 migration, project preservation, task ordering, project isolation, task failures, dependency validity, isolation, cycles, duplicates, removal, atomicity, foreign keys and database error propagation. Linux compatibility and performance targets have not been measured.
 
 Task execution is explicit: `task status 1 ready`, `task ready --project 1`, `run mock 1`, `run list 1`, `run events 1`, then `task status 1 completed` after review. Mock success is simulated and never proves acceptance criteria. `run cancel <run-id>` requests cancellation; `run recover` requires the worker lock and marks abandoned runs interrupted without replay. Failed/cancelled tasks must explicitly return to ready. Dependencies are immutable during running/review/completed states. One worker owns the database lock; keep the database and lock file in a trusted local directory (do not alias databases with hard links).
+
+## Native UI benchmark reproducibility
+
+The native UI is still an experiment, not part of Forge's production CLI. The
+`experiments/ui-bench/Cargo.toml` manifest declares an `egui-bench` executable
+at `experiments/ui-bench/egui.rs`, but that source file is currently missing
+from the tracked repository. **The egui benchmark cannot be built from a clean
+checkout until the missing source is restored and committed.**
+
+`docs/HANDOFF.md` records an earlier local Windows egui prototype and one
+observed working-set measurement. That is historical development evidence,
+**not** a reproducible benchmark from the current repository, a Linux result,
+or proof that the native UI performance target is met. The toolkit remains
+unselected until the prototype is committed and repeatable comparative
+measurements are captured.
+
+Once the missing file has been restored, the documented invocation is:
+
+```powershell
+cargo run --manifest-path experiments/ui-bench/Cargo.toml --features egui --bin egui-bench
+```
+
+Do not use this command as a release or performance claim until it builds and
+runs successfully on the machine being measured.
